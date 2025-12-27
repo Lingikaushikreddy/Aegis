@@ -1,0 +1,24 @@
+# Core
+fastapi
+uvicorn
+typer  # For CLI
+pydantic
+pydantic-settings
+python-jose[cryptography] # For JWT/Security
+
+# Database
+sqlalchemy
+alembic
+aiosqlite  # Async SQLite for Client
+
+# Cryptography
+cryptography
+
+# AI & Federated Learning
+torch --index-url https://download.pytorch.org/whl/cpu  # Defaults to CPU for dev to save space/compat
+numpy
+flwr  # Flower for Federated Learning
+
+# Utilities
+httpx
+loguru

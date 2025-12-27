@@ -13,6 +13,7 @@ aiosqlite  # Async SQLite for Client
 
 # Cryptography
 cryptography
+keyring
 
 # AI & Federated Learning
 torch --index-url https://download.pytorch.org/whl/cpu  # Defaults to CPU for dev to save space/compat
@@ -22,3 +23,4 @@ flwr  # Flower for Federated Learning
 # Utilities
 httpx
 loguru
+pypdf

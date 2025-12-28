@@ -1,6 +1,12 @@
 [package]
 name = "aegis-engine"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 
 [dependencies]
+aes-gcm = "0.10.3"
+rand = "0.8.5"
+thiserror = "1.0"
+zeroize = "1.7"
+base64 = "0.21"
+anyhow = "1.0"

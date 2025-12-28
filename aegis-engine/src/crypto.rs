@@ -64,3 +64,20 @@ impl AegisCrypto {
         Ok(plaintext)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_encryption_roundtrip() {
+        let (crypto, _) = AegisCrypto::new_random();
+        let data = b"Secret Data for VAULTED/AEGIS";
+        
+        let encrypted = crypto.encrypt(data).unwrap();
+        assert_ne!(data, encrypted.as_slice());
+        
+        let decrypted = crypto.decrypt(&encrypted).unwrap();
+        assert_eq!(data, decrypted.as_slice());
+    }
+}

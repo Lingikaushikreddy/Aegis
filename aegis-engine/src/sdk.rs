@@ -60,3 +60,27 @@ impl Vault {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_vault_store_load() {
+        let dir = tempdir().unwrap();
+        let (crypto, key) = AegisCrypto::new_random();
+        
+        // Init Vault
+        let vault = Vault::new(dir.path(), &key).unwrap();
+        
+        // Store
+        let secret = b"Nuclear Codes";
+        let stored_path = vault.store_file("codes.txt", secret).unwrap();
+        assert_eq!(stored_path, "codes.txt.enc");
+        
+        // Load
+        let loaded = vault.load_file("codes.txt.enc").unwrap();
+        assert_eq!(loaded, secret);
+    }
+}

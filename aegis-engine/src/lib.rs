@@ -1,14 +1,10 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+pub mod crypto;
+pub mod sdk;
+pub mod fl_core;
+pub mod network;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+// Re-export common types
+pub use crypto::AegisCrypto;
+pub use sdk::Vault;
+pub use fl_core::{FlClientCore, ModelWeights};
+pub use network::SecureChannel;

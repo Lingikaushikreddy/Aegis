@@ -51,10 +51,10 @@ Aegis uses a "Sandwiched" architecture where the secure Rust core wraps the sens
 graph LR
     subgraph "Secure Enclave (User Device)"
         User[External Data] -->|Ingest Stream| RustCore
-        RustCore{Aegis Engine (Rust)}
-        RustCore <-->|Encrypted Chunks| Disk[(Local Vault)]
+        RustCore{"Aegis Engine (Rust)"}
+        RustCore <-->|Encrypted Chunks| Disk[("Local Vault")]
         
-        PythonOrch[Aegis Core (Python)] -->|Request Access| RustCore
+        PythonOrch["Aegis Core (Python)"] -->|Request Access| RustCore
         RustCore -->|Mem-Only Stream| PythonOrch
         
         PythonOrch -->|Train| Model[PyTorch Model]

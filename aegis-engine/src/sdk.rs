@@ -50,4 +50,71 @@ impl Vault {
         let crypto = AegisCrypto::new_from_key(key)?;
         Ok(Self { root_path, crypto })
     }
+
+    /// Generic store function taking any Reader.
+    /// If `total_size` is known, it should be provided for integrity checks.
+    pub fn store_stream<R: Read>(&self, mut input: R, filename: &str, total_size: Option<u64>) -> Result<String, SdkError> {
+        // Use UUID for physical storage to avoid filesystem issues/traversal attacks during storage
+        let file_id = Uuid::new_v4().to_string();
+        let safe_name = format!("{}.enc", file_id);
+        let dest_path = self.root_path.join(&safe_name);
+        
+        let mut output = BufWriter::new(File::create(&dest_path)?);
+
+        // 1. Prepare Header
+        let header = VaultHeader {
+            original_filename: filename.to_string(),
+            timestamp: SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+            version: 1,
+            total_size,
+        };
+        let header_json = serde_json::to_vec(&header)?;
+        let header_enc = self.crypto.encrypt(&header_json)?;
+        
+        // 2. Write Header Length (u32 LE) + Header
+        let header_len = header_enc.len() as u32;
+        output.write_all(&header_len.to_le_bytes())?;
+        output.write_all(&header_enc)?;
+
+        // 3. Stream Chunks
+        let mut buffer = vec![0u8; CHUNK_SIZE];
+        loop {
+            let n = input.read(&mut buffer)?;
+            if n == 0 { break; }
+
+            let chunk_enc = self.crypto.encrypt(&buffer[..n])?;
+            let chunk_len = chunk_enc.len() as u32;
+
+            output.write_all(&chunk_len.to_le_bytes())?;
+            output.write_all(&chunk_enc)?;
+        }
+
+        output.flush()?;
+        Ok(safe_name)
+    }
+
+    /// Store a file from disk
+    pub fn store_file(&self, source_path: &Path) -> Result<String, SdkError> {
+        if !source_path.exists() {
+            return Err(io::Error::new(io::ErrorKind::NotFound, "Source file not found").into());
+        }
+
+        let filename = source_path.file_name()
+            .ok_or(SdkError::InvalidState)?
+            .to_string_lossy()
+            .to_string();
+
+        let metadata = fs::metadata(source_path)?;
+        let input = BufReader::new(File::open(source_path)?);
+
+        self.store_stream(input, &filename, Some(metadata.len()))
+    }
+
+    /// Store raw bytes from memory
+    pub fn store_memory(&self, data: &[u8], filename: &str) -> Result<String, SdkError> {
+        self.store_stream(io::Cursor::new(data), filename, Some(data.len() as u64))
+    }
 }

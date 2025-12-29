@@ -218,3 +218,142 @@ impl Vault {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+    use std::io::Seek;
+
+    #[test]
+    fn test_vault_stream_store_restore() {
+        let dir = tempdir().unwrap();
+        let vault_root = dir.path().join("vault");
+        let (_crypto, key) = AegisCrypto::new_random();
+        
+        // Init Vault
+        let vault = Vault::new(&vault_root, &key).unwrap();
+
+        // Create a large-ish dummy file (e.g., 2.5 MB to test chunking)
+        let data = vec![0x42u8; 2_500_000];
+        let src_file = dir.path().join("large_secret.bin");
+        fs::write(&src_file, &data).unwrap();
+
+        // Store File
+        let stored_name = vault.store_file(&src_file).unwrap();
+
+        // Verify UUID usage
+        assert!(stored_name.ends_with(".enc"));
+        assert_ne!(stored_name, "large_secret.bin.enc");
+        assert!(Uuid::parse_str(&stored_name.replace(".enc", "")).is_ok());
+
+        // Restore File
+        let restore_dir = dir.path().join("restored");
+        fs::create_dir(&restore_dir).unwrap();
+        let restored_path = vault.restore_file(&stored_name, &restore_dir).unwrap();
+
+        assert_eq!(restored_path.file_name().unwrap(), "large_secret.bin");
+
+        let restored_data = fs::read(&restored_path).unwrap();
+        assert_eq!(data, restored_data);
+    }
+
+    #[test]
+    fn test_memory_ingestion_and_restoration() {
+        let dir = tempdir().unwrap();
+        let vault_root = dir.path().join("vault_mem");
+        let (_crypto, key) = AegisCrypto::new_random();
+        let vault = Vault::new(&vault_root, &key).unwrap();
+
+        let secret_data = b"Super Secret Key In Memory";
+
+        // Store from memory
+        let stored_name = vault.store_memory(secret_data, "secret.key").unwrap();
+
+        // Load to memory (no disk write for plaintext)
+        let loaded_data = vault.load_file_to_memory(&stored_name).unwrap();
+
+        assert_eq!(secret_data.to_vec(), loaded_data);
+    }
+
+    #[test]
+    fn test_truncation_detection() {
+        let dir = tempdir().unwrap();
+        let vault_root = dir.path().join("vault_trunc");
+        let (_crypto, key) = AegisCrypto::new_random();
+        let vault = Vault::new(&vault_root, &key).unwrap();
+
+        let data = vec![0u8; 100];
+        let name = vault.store_memory(&data, "test.bin").unwrap();
+
+        // Corrupt the file: truncate it
+        let enc_path = vault_root.join(&name);
+        let file = File::open(&enc_path).unwrap();
+        let size = file.metadata().unwrap().len();
+        drop(file);
+
+        // Remove last byte
+        let file = fs::OpenOptions::new().write(true).open(&enc_path).unwrap();
+        file.set_len(size - 1).unwrap();
+
+        // Try to load
+        let result = vault.load_file_to_memory(&name);
+        assert!(matches!(result, Err(SdkError::Io(_)) | Err(SdkError::TruncationError) | Err(SdkError::Crypto(_))));
+    }
+
+    #[test]
+    fn test_path_traversal_sanitization() {
+        let dir = tempdir().unwrap();
+        let vault_root = dir.path().join("vault_path");
+        let (_crypto, key) = AegisCrypto::new_random();
+        let vault = Vault::new(&vault_root, &key).unwrap();
+
+        let data = b"Sensitive Data";
+
+        // Store with a malicious filename
+        // Because we use UUIDs for storage, this should SUCCEED now.
+        // The malicious filename is stored in the header.
+        let stored_name = vault.store_memory(data, "../../../etc/passwd").unwrap();
+
+        let restore_dir = dir.path().join("safe_zone");
+        fs::create_dir(&restore_dir).unwrap();
+
+        // Attempt restore
+        let restored_path = vault.restore_file(&stored_name, &restore_dir).unwrap();
+
+        // Verification: It should be inside restore_dir, and filename should be sanitized (passwd)
+        assert_eq!(restored_path.parent().unwrap(), restore_dir);
+        assert_eq!(restored_path.file_name().unwrap(), "passwd");
+    }
+
+    #[test]
+    fn test_cleanup_on_failure() {
+        let dir = tempdir().unwrap();
+        let vault_root = dir.path().join("vault_fail");
+        let (_crypto, key) = AegisCrypto::new_random();
+        let vault = Vault::new(&vault_root, &key).unwrap();
+
+        let data = vec![0u8; 1024];
+        let name = vault.store_memory(&data, "fail.bin").unwrap();
+
+        // Corrupt the middle of the file to cause crypto error during stream
+        let enc_path = vault_root.join(&name);
+        let mut file = fs::OpenOptions::new().write(true).open(&enc_path).unwrap();
+        // Skip header stuff (approx 100 bytes) + chunk len (4) + nonce (12)
+        // Corrupt data
+        file.seek(std::io::SeekFrom::Start(150)).unwrap();
+        file.write_all(&[0xFF; 10]).unwrap();
+        drop(file);
+
+        let restore_dir = dir.path().join("restore_fail");
+        fs::create_dir(&restore_dir).unwrap();
+        
+        // Restore should fail
+        let result = vault.restore_file(&name, &restore_dir);
+        assert!(result.is_err());
+        
+        // Partial file should be gone
+        let target_file = restore_dir.join("fail.bin");
+        assert!(!target_file.exists(), "Partial file should have been cleaned up");
+    }
+}

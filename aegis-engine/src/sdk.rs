@@ -1,8 +1,11 @@
 use std::path::{Path, PathBuf};
-use std::fs;
+use std::fs::{self, File};
+use std::io::{self, Read, Write, BufReader, BufWriter};
 use crate::crypto::{AegisCrypto, CryptoError};
 use thiserror::Error;
-use zeroize::Zeroize;
+use serde::{Serialize, Deserialize};
+use std::time::SystemTime;
+use uuid::Uuid;
 
 #[derive(Error, Debug)]
 pub enum SdkError {
@@ -10,14 +13,31 @@ pub enum SdkError {
     Io(#[from] std::io::Error),
     #[error("Crypto Error: {0}")]
     Crypto(#[from] CryptoError),
-    #[error("Vault invalid")]
+    #[error("Serialization Error: {0}")]
+    Serialization(#[from] serde_json::Error),
+    #[error("Vault invalid state")]
     InvalidState,
+    #[error("File integrity check failed")]
+    IntegrityError,
+    #[error("Data truncation detected")]
+    TruncationError,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct VaultHeader {
+    pub original_filename: String,
+    pub timestamp: u64,
+    pub version: u8,
+    // total_size is optional because we might stream unknown length data
+    pub total_size: Option<u64>,
 }
 
 pub struct Vault {
     root_path: PathBuf,
     crypto: AegisCrypto,
 }
+
+const CHUNK_SIZE: usize = 1024 * 1024; // 1 MB
 
 impl Vault {
     /// Initialize a new Vault or load existing one
@@ -29,58 +49,5 @@ impl Vault {
         
         let crypto = AegisCrypto::new_from_key(key)?;
         Ok(Self { root_path, crypto })
-    }
-
-    /// Store a file securely in the vault
-    /// Returns the relative path to the stored encrypted file
-    pub fn store_file(&self, filename: &str, data: &[u8]) -> Result<String, SdkError> {
-        let encrypted = self.crypto.encrypt(data)?;
-        
-        // Use a safe filename (hash or controlled name)
-        // For MVP, we just append .enc
-        let safe_name = format!("{}.enc", filename);
-        let dest = self.root_path.join(&safe_name);
-        
-        fs::write(&dest, encrypted)?;
-        Ok(safe_name)
-    }
-
-    /// Retrieve a file from the vault
-    pub fn load_file(&self, encrypted_filename: &str) -> Result<Vec<u8>, SdkError> {
-        let src = self.root_path.join(encrypted_filename);
-        let encrypted_data = fs::read(src)?;
-        
-        let plaintext = self.crypto.decrypt(&encrypted_data)?;
-        Ok(plaintext)
-    }
-
-    /// Destroy the vault (Crypto Shredding simulation)
-    pub fn nuke(&self) -> Result<(), SdkError> {
-        fs::remove_dir_all(&self.root_path)?;
-        Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tempfile::tempdir;
-
-    #[test]
-    fn test_vault_store_load() {
-        let dir = tempdir().unwrap();
-        let (crypto, key) = AegisCrypto::new_random();
-        
-        // Init Vault
-        let vault = Vault::new(dir.path(), &key).unwrap();
-        
-        // Store
-        let secret = b"Nuclear Codes";
-        let stored_path = vault.store_file("codes.txt", secret).unwrap();
-        assert_eq!(stored_path, "codes.txt.enc");
-        
-        // Load
-        let loaded = vault.load_file("codes.txt.enc").unwrap();
-        assert_eq!(loaded, secret);
     }
 }

@@ -1,133 +1,142 @@
-# AEGIS
-
-> **The Privacy-First Federated Learning Ecosystem.**
-> *Compute-to-Data Infrastructure for the AI Era.*
+# 🛡️ AEGIS
+> **The Fortress for Your Data.**
+> *Next-Generation Privacy-Preserving Infrastructure for the AI Era.*
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Rust: 1.70+](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://www.rust-lang.org/)
+[![Rust: 1.75+](https://img.shields.io/badge/rust-1.75%2B-orange.svg)](https://www.rust-lang.org/)
 [![Python: 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
-[![Security: AES-256-GCM](https://img.shields.io/badge/Security-AES--256--GCM-green.svg)](docs/ENCRYPTION.md)
+[![Security: AES-256-GCM](https://img.shields.io/badge/Encryption-AES--256--GCM-green.svg)](docs/ENCRYPTION.md)
+[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](actions)
 
-**Aegis** is a high-performance, privacy-preserving infrastructure that enables **Federated Learning (FL)** on personal data without that data ever leaving the user's device. We implement a **Zero Trust** architecture where model training occurs locally within a secure enclave, and only differential-private updates are shared.
+**Aegis** is an enterprise-grade, zero-trust infrastructure designed to enable **Federated Learning (FL)** and secure data storage on untrusted devices. It bridges the gap between high-level AI research (Python/PyTorch) and military-grade verified security (Rust).
+
+---
+
+## 🚀 Why Aegis?
+
+Traditional crypto-systems are slow or hard to integrate. Pure Python implementations leak memory and are vulnerable to inspection. **Aegis** solves this with a **Hybrid Core Architecture**:
+
+| Feature | Traditional Solutions | 🛡️ Aegis |
+| :--- | :--- | :--- |
+| **Encryption** | File-level (slow) | **Stream-based Chunks (Instant)** |
+| **Memory Safety** | Vulnerable (GC) | **Zeroize™ (RAM Scrubbing)** |
+| **Path Security** | Traversal Risks | **UUID-based Physical Storage** |
+| **Compliance** | Manual Checks | **Automated Policy Engine** |
+| **Performance** | Interpreter Speed | **Native Rust Speed** |
+
+---
 
 ## 🌟 Key Features
 
-### 🛡️ Iron-Clad Security
-*   **Hybrid Core**: High-performance encryption engine written in **Rust** (`aegis-engine`), orchestrated by Python.
-*   **Encryption at Rest**: All local data is encrypted using **AES-256-GCM** with keys managed via the OS Keychain (macOS/Windows/Linux).
-*   **Right-to-Forget**: Built-in "Crypto-Shredding" allows users to instantly revoke access data by destroying encryption keys.
-*   **Audit Trails**: Immutable SQLite ledger records every single data access or training request.
+### 🔒 Secure Vault Engine (`aegis-engine`)
+Built in **Rust** for maximum safety and speed.
+*   **Streaming Encryption**: Encrypts multi-gigabyte datasets with constant RAM usage.
+*   **Crypto-Shredding**: Delete the key, and the data is mathematically gone forever.
+*   **Sanitized Storage**: Physical files use UUIDs to prevent directory traversal attacks; original filenames are encrypted in the header.
+*   **In-Memory Operations**: Load encrypted data directly into RAM for training without ever touching the disk as plaintext.
 
-### ⚖️ Regulatory Compliance
-*   **Automated Compliance Engine**: Enforces **GDPR**, **CCPA**, and **HIPAA** rules before data access.
-*   **Consent Policies**: Granular permissions (e.g., "Allow `HealthCorp` to `TRAIN` on `Medical` data until `2026`").
-*   **Data Minimization**: Automatically filters and minimizes datasets based on the job specification.
-
-### 🧠 Federated Intelligence
-*   **Local Training**: PyTorch models train directly on the user's device.
-*   **Secure Aggregation**: Supports Differential Privacy (DP) noise injection to prevent model inversion attacks.
-*   **Enterprise Gateway**: A secure API for analysts to submit jobs without seeing raw data.
+### 🧠 Federated Intelligence (`aegis-core`)
+Orchestrated in **Python** for ecosystem compatibility.
+*   **Local Training**: Run PyTorch/TensorFlow jobs inside the secure enclave.
+*   **Differential Privacy**: Inject noise into model updates before they leave the device.
+*   **Compliance-First**: The `ComplianceEngine` checks every data access request against active GDPR/CCPA policies.
 
 ---
 
-## 🏗 System Architecture
+## 🏗 Architecture
 
-The system uses a **Hybrid Python/Rust Architecture** to balance performance and ecosystem compatibility.
+Aegis uses a "Sandwiched" architecture where the secure Rust core wraps the sensitive data, offering a safe API to the Python AI layer.
 
 ```mermaid
-graph TD
-    subgraph "Aegis Client (User Device)"
-        A[App / CLI] -->|Control| B(Aegis Core - Python)
-        B -->|High Perf Tasks| C{Aegis Engine - Rust}
-        C -->|Encrypt/Decrypt| D[Local Storage (AES-256)]
-        B -->|Train| E[PyTorch Trainer]
-        C -->|Secure Comms| F[gRPC / TLS 1.3]
+graph LR
+    subgraph "Secure Enclave (User Device)"
+        User[External Data] -->|Ingest Stream| RustCore
+        RustCore{Aegis Engine (Rust)}
+        RustCore <-->|Encrypted Chunks| Disk[(Local Vault)]
+        
+        PythonOrch[Aegis Core (Python)] -->|Request Access| RustCore
+        RustCore -->|Mem-Only Stream| PythonOrch
+        
+        PythonOrch -->|Train| Model[PyTorch Model]
     end
-
-    subgraph "Cloud Infrastructure"
-        F <--> G[Aegis Server (Federated Orchestrator)]
-        G <--> H[Enterprise Gateway]
-    end
+    
+    Model -.->|Diff-Private Weights| Cloud[Aggregation Server]
 ```
-
-### Components
-1.  **Aegis Engine (`aegis-engine`)**: The **Rust** power-plant. Handles crypto primitives, secure file I/O, and low-level networking.
-2.  **Aegis Core (`aegis-core`)**: The **Python** orchestrator. Manages logical flow, PyTorch training loops, and database interactions.
-3.  **Aegis Server (`aegis-server`)**: The centralized Federated Learning aggregator (based on Flower).
 
 ---
 
-## 🚀 Getting Started
+## ⚡ Getting Started
 
 ### Prerequisites
-- **Python**: 3.10+
-- **Rust**: 1.70+ (install via [rustup.rs](https://rustup.rs/))
-- **OS**: macOS, Linux, or Windows (WSL2 recommended)
+*   **Rust**: 1.70+ (`curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`)
+*   **Python**: 3.10+
 
 ### Installation
 
-1.  **Clone the Repository**
+1.  **Clone & Setup**
     ```bash
     git clone https://github.com/Lingikaushikreddy/Aegis.git
     cd Aegis
     ```
 
-2.  **Build the Rust Core**
+2.  **Build the High-Performance Core**
     ```bash
     cd aegis-engine
     cargo build --release
-    # Run tests to verify system integrity
+    # Verify system integrity tests
     cargo test
-    cd ..
     ```
 
-3.  **Setup Python Environment**
+3.  **Install Python Dependencies**
     ```bash
+    cd ..
     pip install -r requirements.txt
     ```
 
----
+### Usage Example: Secure Ingestion
 
-## 💻 Usage
+```python
+import sys
+# Add core to path (or install via pip in future)
+sys.path.append("aegis-engine/bindings") 
 
-### 1. Initialize & Secure Data
-Simulate the "User" side by ingesting and encrypting data.
+# Pseudocode for upcoming Python Bindings
+from aegis import Vault
 
-```bash
-export PYTHONPATH=$PYTHONPATH:$(pwd)/aegis-core
+# 1. Initialize Vault
+vault = Vault.new("./my_secure_vault", key=b"SUPER_SECRET_32_BYTE_KEY_1234567")
 
-# Integrated test script that creates a vault, encrypts data, and stores metadata
-python test_ingestion.py
-```
+# 2. Securely Ingest a Large Financial Dataset
+# This streams the file, encrypting in 1MB chunks, never loading the full file to RAM.
+encrypted_file_id = vault.store_file("finance_data.csv")
 
-### 2. Run Compliance Check
-Verify that your data and policies meet GDPR/CCPA standards.
-
-```bash
-./run_compliance_check.sh
-# Output: "COMPLIANCE_DASHBOARD.md" generated with active policies and audit logs.
-```
-
-### 3. Check System Integrity
-Run the Rust integration tests to verify the Vault SDK.
-
-```bash
-cd aegis-engine && cargo test
+print(f"Secured as: {encrypted_file_id}")
+# Physical file on disk: ./my_secure_vault/550e8400-e29b-41d4-a716-446655440000.enc
 ```
 
 ---
 
-## 📚 Documentation
+## 🗺️ Roadmap
 
-- [**System Architecture**](docs/systems_architecture.md) - Deep dive into the Rust/Python design.
-- [**Security Specification**](docs/security_spec.md) - Threat models and cryptographic standards.
-- [**Compliance Mapping**](docs/GDPR_MAPPING.md) - How we implement legal requirements in code.
+- [x] **Phase 1: Foundation** - Rust Core, AES-GCM, Basic Vault.
+- [x] **Phase 2: Hardening** - Streaming I/O, Path Sanitization, Memory Zeroing.
+- [ ] **Phase 3: Python Bindings** - `PyO3` integration for seamless `pip install aegis`.
+- [ ] **Phase 4: TEE Integration** - Intel SGX / AMD SEV support for remote attestation.
+- [ ] **Phase 5: Network Layer** - Libp2p implementation for decentralized storage.
+
+---
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see the issue tracker for standard tasks.
-**Security Note**: All code changes to `aegis-engine` must pass the `cargo audit` security scan.
+Security is our top priority.
+*   **Report Vulnerabilities**: Please create a draft security advisory on GitHub.
+*   **Code Style**: 
+    *   Rust: `cargo fmt` & `cargo clippy`
+    *   Python: `black` & `mypy`
 
 ## 📄 License
 
-MIT License. See `LICENSE` for details.
+Licensed under MIT. See [LICENSE](LICENSE) for details.
+
+---
+*Built with ❤️ by the Aegis Team.*

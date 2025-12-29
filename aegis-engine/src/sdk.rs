@@ -117,4 +117,35 @@ impl Vault {
     pub fn store_memory(&self, data: &[u8], filename: &str) -> Result<String, SdkError> {
         self.store_stream(io::Cursor::new(data), filename, Some(data.len() as u64))
     }
+
+    /// Internal helper to process the stream of chunks
+    fn process_stream<R: Read, W: Write>(&self, mut input: R, mut output: W, expected_size: Option<u64>) -> Result<(), SdkError> {
+        let mut len_buf = [0u8; 4];
+        let mut total_bytes_written = 0u64;
+
+        loop {
+            match input.read_exact(&mut len_buf) {
+                Ok(()) => {},
+                Err(ref e) if e.kind() == io::ErrorKind::UnexpectedEof => break,
+                Err(e) => return Err(e.into()),
+            }
+
+            let chunk_len = u32::from_le_bytes(len_buf) as usize;
+            let mut chunk_buf = vec![0u8; chunk_len];
+            input.read_exact(&mut chunk_buf)?;
+
+            let plaintext = self.crypto.decrypt(&chunk_buf)?;
+            output.write_all(&plaintext)?;
+            total_bytes_written += plaintext.len() as u64;
+        }
+
+        if let Some(size) = expected_size {
+            if total_bytes_written != size {
+                return Err(SdkError::TruncationError);
+            }
+        }
+
+        output.flush()?;
+        Ok(())
+    }
 }

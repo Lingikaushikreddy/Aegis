@@ -24,3 +24,4 @@ flwr  # Flower for Federated Learning
 httpx
 loguru
 pypdf
+prometheus-client

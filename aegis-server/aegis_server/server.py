@@ -1,12 +1,13 @@
 import flwr as fl
 from pathlib import Path
+from .strategy import AegisPrivacyStrategy
 
 def start_fl_server():
     print("Starting Aegis FL Server...")
 
-    # Define strategy (FedAvg is the default, but explicit is better)
-    # TODO: Switch to SecAgg when clients are ready
-    strategy = fl.server.strategy.FedAvg(
+    # Define strategy with Privacy and Validation
+    strategy = AegisPrivacyStrategy(
+        privacy_level="high",
         fraction_fit=1.0,  # Train on all available clients (for testing)
         fraction_evaluate=1.0,
         min_fit_clients=1,  # Wait for at least 1 client

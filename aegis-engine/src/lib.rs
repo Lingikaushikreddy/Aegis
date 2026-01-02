@@ -3,6 +3,7 @@ pub mod sdk;
 pub mod fl_core;
 pub mod network;
 pub mod mobile;
+pub mod dp;
 
 // Re-export common types
 pub use crypto::AegisCrypto;

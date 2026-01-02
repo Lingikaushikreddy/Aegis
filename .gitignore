@@ -30,3 +30,5 @@ test_data/
 .DS_Store
 aegis-engine/out/
 vaulted/
+*.dylib
+

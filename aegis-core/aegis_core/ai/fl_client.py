@@ -3,6 +3,16 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from collections import OrderedDict
+import os
+import sys
+
+# Ensure the engine module can be found if not installed
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+try:
+    from engine import aegis_engine
+except ImportError:
+    aegis_engine = None
+
 from .trainer import SimpleNet, load_data
 
 class AegisClient(fl.client.NumPyClient):
@@ -11,6 +21,21 @@ class AegisClient(fl.client.NumPyClient):
         self.train_loader = load_data() # Simulating local data access
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model.to(self.device)
+        self.engine = None
+
+        # Initialize the Rust engine with default safe params
+        # Real params should come from server config ideally, but engine init is costly/stateful
+        # We'll init lazily or with defaults
+        if aegis_engine:
+            try:
+                self.engine = aegis_engine.FlClientCore(
+                    data_path="./data", # Dummy path as actual data is loaded via PyTorch here
+                    dp_sigma=1.0,
+                    dp_threshold=1.0
+                )
+            except Exception as e:
+                print(f"Failed to initialize Aegis Rust Engine: {e}")
+                self.engine = None
 
     def get_parameters(self, config):
         return [val.cpu().numpy() for _, val in self.model.state_dict().items()]
@@ -20,41 +45,75 @@ class AegisClient(fl.client.NumPyClient):
         state_dict = OrderedDict({k: torch.tensor(v) for k, v in params_dict})
         self.model.load_state_dict(state_dict, strict=True)
 
+    def _get_flattened_weights(self):
+        """Extract and flatten model weights."""
+        return torch.cat([p.data.view(-1) for p in self.model.parameters()]).tolist()
+
+    def _set_flattened_weights(self, flat_weights: list):
+        """Load flattened weights back into model."""
+        pointer = 0
+        new_tensor_data = torch.tensor(flat_weights, device=self.device)
+        for p in self.model.parameters():
+            num_param = p.numel()
+            p.data.copy_(new_tensor_data[pointer:pointer+num_param].view_as(p))
+            pointer += num_param
+
     def fit(self, parameters, config):
         self.set_parameters(parameters)
         
+        # 1. Capture Initial State for Update Calculation
+        initial_weights_flat = self._get_flattened_weights()
+
         # Parse Privacy Config
         privacy_level = config.get("privacy_level", "low")
         print(f"Client received config: Privacy Level = {privacy_level}")
 
-        # Train locally
+        if privacy_level == "high" and self.engine is None:
+             raise RuntimeError("High privacy requested but Aegis Rust Engine is not available!")
+
+        # 2. Local Training
         criterion = nn.BCELoss()
         optimizer = optim.SGD(self.model.parameters(), lr=0.01)
         self.model.train()
         
-        for _ in range(1): # 1 epoch per round for now
+        for _ in range(1): # 1 epoch per round
             for inputs, labels in self.train_loader:
                 inputs, labels = inputs.to(self.device), labels.to(self.device)
                 optimizer.zero_grad()
                 outputs = self.model(inputs)
                 loss = criterion(outputs, labels)
                 loss.backward()
-                
-                # --- PRIVACY INJECTION (Differential Privacy) ---
-                # 1. Gradient Clipping (Prevent any single sample from having too much influence)
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
-                
-                # 2. Add Noise (Simulated DP)
-                # In production we would use opacus, but manual noise demonstrates the arch pattern
-                if privacy_level == "high":
-                    with torch.no_grad():
-                        for param in self.model.parameters():
-                            if param.grad is not None:
-                                noise = torch.randn_like(param.grad) * 0.01
-                                param.grad += noise
-
                 optimizer.step()
-                
+
+        # 3. Calculate Update
+        final_weights_flat = self._get_flattened_weights()
+
+        # update = final - initial
+        update_vector = [f - i for f, i in zip(final_weights_flat, initial_weights_flat)]
+
+        # 4. Apply Privacy via Rust Engine
+        if privacy_level == "high":
+            print("--- Delegating to Rust Engine for Secure DP ---")
+            rust_weights = aegis_engine.ModelWeights(
+                data=update_vector,
+                shape=[len(update_vector)]
+            )
+            try:
+                # The engine applies clipping and noise to the UPDATE
+                privatized_result = self.engine.privatize_update(rust_weights)
+                privatized_update = privatized_result.data
+            except Exception as e:
+                raise RuntimeError(f"Privacy Engine Failure: {e}")
+        else:
+            # Low privacy: send raw gradients
+            privatized_update = update_vector
+
+        # 5. Reconstruct Weights
+        # new_global = initial + privatized_update
+        new_global_weights = [i + u for i, u in zip(initial_weights_flat, privatized_update)]
+
+        self._set_flattened_weights(new_global_weights)
+
         return self.get_parameters(config={}), len(self.train_loader.dataset), {}
 
     def evaluate(self, parameters, config):

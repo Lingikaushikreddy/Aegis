@@ -14,7 +14,10 @@ from flwr.common import (
 )
 from flwr.server.client_proxy import ClientProxy
 from flwr.server.strategy import FedAvg
-import numpy as np
+import logging
+
+# Initialize logger
+logger = logging.getLogger(__name__)
 
 class AegisPrivacyStrategy(FedAvg):
     def __init__(
@@ -68,23 +71,38 @@ class AegisPrivacyStrategy(FedAvg):
                 if is_valid:
                     valid_results.append((client, fit_res))
                 else:
-                    print(f"WARNING: Dropped update from {client} due to numerical instability (NaN/Inf).")
+                    logger.warning(f"Dropped update from {client} due to numerical instability (NaN/Inf).")
                     dropped_clients += 1
             except Exception as e:
-                print(f"WARNING: Failed to validate update from {client}: {e}")
+                logger.warning(f"Failed to validate update from {client}: {e}")
                 dropped_clients += 1
 
         if not valid_results:
+             logger.error("No valid results received for aggregation.")
              return None, {}
 
         # 2. Call parent aggregation
         aggregated_parameters, aggregated_metrics = super().aggregate_fit(server_round, valid_results, failures)
 
+        if aggregated_parameters is not None:
+            # Checkpointing: Save global model weights
+            logger.info(f"Saving checkpoint for Round {server_round}...")
+            try:
+                # Convert to numpy arrays
+                ndarrays = parameters_to_ndarrays(aggregated_parameters)
+                
+                # Save to disk (robust versioning)
+                checkpoint_path = f"checkpoints/model_round_{server_round}.npz"
+                np.savez_compressed(checkpoint_path, *ndarrays)
+                logger.info(f"Checkpoint saved: {checkpoint_path}")
+            except Exception as e:
+                logger.error(f"Failed to save checkpoint: {e}")
+
         if aggregated_metrics is None:
             aggregated_metrics = {}
 
         aggregated_metrics["dropped_clients"] = dropped_clients
-
+        
         return aggregated_parameters, aggregated_metrics
 
     def aggregate_evaluate(

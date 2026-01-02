@@ -9,8 +9,8 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 try:
     from engine import aegis_engine
-except ImportError:
-    print("Warning: aegis_engine binding not found. Ensure binaries are built.")
+except (ImportError, OSError) as e:
+    print(f"Warning: aegis_engine binding not found or failed to load. Ensure binaries are built. Error: {e}")
     aegis_engine = None
 
 class SimpleNet(nn.Module):

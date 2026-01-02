@@ -9,6 +9,8 @@ class AegisClient(fl.client.NumPyClient):
     def __init__(self):
         self.model = SimpleNet()
         self.train_loader = load_data() # Simulating local data access
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model.to(self.device)
 
     def get_parameters(self, config):
         return [val.cpu().numpy() for _, val in self.model.state_dict().items()]
@@ -21,12 +23,18 @@ class AegisClient(fl.client.NumPyClient):
     def fit(self, parameters, config):
         self.set_parameters(parameters)
         
+        # Parse Privacy Config
+        privacy_level = config.get("privacy_level", "low")
+        print(f"Client received config: Privacy Level = {privacy_level}")
+
         # Train locally
         criterion = nn.BCELoss()
         optimizer = optim.SGD(self.model.parameters(), lr=0.01)
+        self.model.train()
         
         for _ in range(1): # 1 epoch per round for now
             for inputs, labels in self.train_loader:
+                inputs, labels = inputs.to(self.device), labels.to(self.device)
                 optimizer.zero_grad()
                 outputs = self.model(inputs)
                 loss = criterion(outputs, labels)
@@ -38,10 +46,12 @@ class AegisClient(fl.client.NumPyClient):
                 
                 # 2. Add Noise (Simulated DP)
                 # In production we would use opacus, but manual noise demonstrates the arch pattern
-                if config.get("privacy_level") == "high":
-                    for param in self.model.parameters():
-                        noise = torch.randn_like(param) * 0.01
-                        param.grad += noise
+                if privacy_level == "high":
+                    with torch.no_grad():
+                        for param in self.model.parameters():
+                            if param.grad is not None:
+                                noise = torch.randn_like(param.grad) * 0.01
+                                param.grad += noise
 
                 optimizer.step()
                 
@@ -53,16 +63,18 @@ class AegisClient(fl.client.NumPyClient):
         loss = 0.0
         correct = 0
         total = 0
+        self.model.eval()
         
         with torch.no_grad():
             for inputs, labels in self.train_loader:
+                inputs, labels = inputs.to(self.device), labels.to(self.device)
                 outputs = self.model(inputs)
                 loss += criterion(outputs, labels).item()
                 predicted = (outputs > 0.5).float()
                 total += labels.size(0)
                 correct += (predicted == labels).sum().item()
         
-        accuracy = correct / total
+        accuracy = correct / total if total > 0 else 0
         return float(loss), len(self.train_loader.dataset), {"accuracy": float(accuracy)}
 
 def start_client():

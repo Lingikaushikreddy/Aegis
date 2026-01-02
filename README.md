@@ -46,6 +46,12 @@ Orchestrated in **Python** (server) and **Rust** (client privacy).
 *   **Server Strategy**: Custom Flower (`flwr`) strategy for distributing privacy budgets.
 *   **Performance**: Privacy operations take <3ms per update.
 
+### 🌐 Distributed Coordination (`aegis-server`)
+Reliable aggregation infrastructure for real-world deployment.
+*   **Crash Recovery**: Server automatically restores state from the latest checkpoint (`model_round_X.npz`) on startup.
+*   **Model Versioning**: Every training round is strictly versioned and persisted.
+*   **Fault Tolerance**: Robust handling of client dropouts and connection timeouts.
+
 ---
 
 ## 🏗 Architecture
@@ -132,8 +138,9 @@ print(f"Update Secured. Privacy Budget Consumed.")
 - [x] **Phase 2: Hardening** - Streaming I/O, Path Sanitization, Memory Zeroing.
 - [x] **Phase 3: Mobile & Bindings** - UniFFI for iOS (Swift) & Android (Kotlin).
 - [x] **Phase 4: Federated Learning** - DP-SGD Pipeline, Flower Integration, Server Strategy.
-- [ ] **Phase 5: Secure Aggregation** - Multi-Party Computation (MPC) for stronger guarantees.
+- [x] **Phase 5: Distributed Systems** - Checkpointing, Crash Recovery, Fault Tolerance.
 - [ ] **Phase 6: Network Layer** - Libp2p implementation for decentralized storage.
+- [ ] **Phase 7: Secure Aggregation** - Multi-Party Computation (MPC) for stronger guarantees.
 
 ---
 

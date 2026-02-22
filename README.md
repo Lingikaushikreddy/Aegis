@@ -91,6 +91,7 @@ graph TD
 *   **Rust**: 1.70+ (`curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`)
 *   **Python**: 3.10+
 *   **Xcode** (for iOS) / **Android Studio** (for Android)
+*   **Node.js**: 18+ (for Frontend UI)
 
 ### Installation
 
@@ -111,6 +112,12 @@ graph TD
 3.  **Install Python Dependencies (FL)**
     ```bash
     pip install -r requirements.txt
+    ```
+
+4.  **Launch the Frontend UI**
+    ```bash
+    npm install
+    npm run dev
     ```
 
 ### Usage Example: Privacy-Preserving Training

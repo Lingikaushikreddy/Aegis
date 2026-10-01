@@ -11,7 +11,7 @@ Run:
 
 import os
 import sqlite3
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, closing
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -24,14 +24,18 @@ KEYSTORE_PATH = os.environ.get("AEGIS_KEYSTORE", "aegis-keys.db")
 state = {}
 
 
+def connect() -> sqlite3.Connection:
+    # One connection per request: sqlite3 connections must not be shared between the threads
+    # FastAPI runs sync endpoints on.
+    return sqlite3.connect(DB_PATH, timeout=30)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     state["vault"] = Vault.open(KEYSTORE_PATH, MasterKey.from_env("AEGIS_MASTER_KEY"), create=True)
-    db = sqlite3.connect(DB_PATH, check_same_thread=False)
-    db.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name BLOB NOT NULL, email BLOB NOT NULL)")
-    state["db"] = db
+    with closing(connect()) as db, db:
+        db.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name BLOB NOT NULL, email BLOB NOT NULL)")
     yield
-    db.close()
 
 
 app = FastAPI(title="aegis-shred example: user directory", lifespan=lifespan)
@@ -48,25 +52,25 @@ def subject(user_id: int) -> str:
 
 @app.post("/users", status_code=201)
 def create_user(user: NewUser):
-    db, vault = state["db"], state["vault"]
-    cursor = db.execute("INSERT INTO users (name, email) VALUES (x'', x'')")
-    user_id = cursor.lastrowid
-    db.execute(
-        "UPDATE users SET name = ?, email = ? WHERE id = ?",
-        (
-            vault.seal(subject(user_id), user.name.encode(), context=f"users.name:{user_id}".encode()),
-            vault.seal(subject(user_id), user.email.encode(), context=f"users.email:{user_id}".encode()),
-            user_id,
-        ),
-    )
-    db.commit()
+    vault = state["vault"]
+    with closing(connect()) as db, db:  # one transaction: the row id and its sealed fields
+        user_id = db.execute("INSERT INTO users (name, email) VALUES (x'', x'')").lastrowid
+        db.execute(
+            "UPDATE users SET name = ?, email = ? WHERE id = ?",
+            (
+                vault.seal(subject(user_id), user.name.encode(), context=f"users.name:{user_id}".encode()),
+                vault.seal(subject(user_id), user.email.encode(), context=f"users.email:{user_id}".encode()),
+                user_id,
+            ),
+        )
     return {"id": user_id}
 
 
 @app.get("/users/{user_id}")
 def read_user(user_id: int):
-    db, vault = state["db"], state["vault"]
-    row = db.execute("SELECT name, email FROM users WHERE id = ?", (user_id,)).fetchone()
+    vault = state["vault"]
+    with closing(connect()) as db:
+        row = db.execute("SELECT name, email FROM users WHERE id = ?", (user_id,)).fetchone()
     if row is None:
         raise HTTPException(404, "no such user")
     try:

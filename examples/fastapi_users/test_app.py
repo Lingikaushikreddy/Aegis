@@ -1,6 +1,7 @@
 import importlib
 import sqlite3
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -36,3 +37,15 @@ def test_erasure_flow(client, tmp_path):
     assert client.get(f"/users/{user_id}").status_code == 410
     assert client.delete(f"/users/{user_id}").status_code == 404
     assert client.get("/users/999").status_code == 404
+
+
+def test_concurrent_signups_keep_each_users_data(client):
+    def signup(i):
+        email = f"user{i}@example.com"
+        return client.post("/users", json={"name": f"User {i}", "email": email}).json()["id"], email
+
+    with ThreadPoolExecutor(max_workers=16) as pool:
+        created = list(pool.map(signup, range(200)))
+    assert len({user_id for user_id, _ in created}) == 200
+    for user_id, email in created:
+        assert client.get(f"/users/{user_id}").json()["email"] == email

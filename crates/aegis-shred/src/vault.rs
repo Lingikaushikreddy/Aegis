@@ -229,6 +229,7 @@ impl Vault {
                 "unsupported keystore schema version",
             ));
         }
+        keystore::use_rollback_journal(&conn)?;
         let kind = keystore::meta_require(&conn, "kek_kind")?;
         if kind != master_key.kind().as_bytes() {
             return Err(Error::WrongMasterKey(if kind == b"passphrase" {

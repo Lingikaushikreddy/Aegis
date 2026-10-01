@@ -506,3 +506,34 @@ fn stale_process_cannot_create_keys_after_rotation() {
     assert!(!current.has_key("new-user").unwrap());
     current.rotate_master_key(&MasterKey::generate()).unwrap();
 }
+
+#[test]
+fn foreign_wal_database_is_left_untouched() {
+    let dir = TempDir::new().unwrap();
+    let key = MasterKey::generate();
+    let app_db = dir.path().join("app.db");
+    {
+        let conn = raw_db(&app_db);
+        let mode: String = conn
+            .query_row("PRAGMA journal_mode = WAL", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(mode, "wal");
+        conn.execute_batch("CREATE TABLE users (id INTEGER);")
+            .unwrap();
+    }
+    assert!(matches!(
+        Vault::open(&app_db, &key),
+        Err(Error::Keystore(_))
+    ));
+    assert!(matches!(
+        Vault::open_or_create(&app_db, &key),
+        Err(Error::InvalidArgument(_))
+    ));
+    let mode: String = raw_db(&app_db)
+        .query_row("PRAGMA journal_mode", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(
+        mode, "wal",
+        "the vault must not change another app's database"
+    );
+}

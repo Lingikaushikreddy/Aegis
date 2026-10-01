@@ -67,9 +67,17 @@ pub(crate) fn now() -> i64 {
         .unwrap_or(0)
 }
 
+/// Per-connection settings only: nothing here writes to the database file, so opening a file
+/// that turns out not to be a keystore leaves it untouched.
 fn configure(conn: &Connection) -> Result<()> {
     conn.busy_timeout(Duration::from_secs(5))?;
     conn.pragma_update(None, "secure_delete", "ON")?;
+    Ok(())
+}
+
+/// Keeps a keystore in rollback-journal mode (new SQLite files start in it; this undoes a
+/// switch to WAL). Call only once the file is known to be a keystore.
+pub(crate) fn use_rollback_journal(conn: &Connection) -> Result<()> {
     let _mode: String =
         conn.pragma_update_and_check(None, "journal_mode", "DELETE", |row| row.get(0))?;
     Ok(())

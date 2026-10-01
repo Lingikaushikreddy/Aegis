@@ -7,5 +7,7 @@
 #![warn(missing_docs)]
 
 mod error;
+mod keys;
 
 pub use error::{Error, Result};
+pub use keys::MasterKey;

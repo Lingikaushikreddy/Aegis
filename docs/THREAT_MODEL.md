@@ -24,7 +24,9 @@ This page says exactly when that is true and when it is not.
    Swapping two users' blobs, or moving a blob between columns, fails when contexts differ.
 4. **Tamper evidence for the audit log.** Editing, inserting, reordering or deleting entries
    before the newest one is detected by `verify_audit()`.
-5. **No partial plaintext from files.** `unseal_file` writes nothing unless every chunk verifies.
+5. **No partial plaintext at the destination.** `unseal_file` decrypts into a temporary file in
+   the destination's directory and renames it into place only after every chunk verifies; on any
+   error the temporary file is deleted.
 
 ## Assumptions
 
@@ -44,6 +46,7 @@ This page says exactly when that is true and when it is not.
 | Plaintext your application copied elsewhere | Logs, caches, search indexes, analytics, emails, error trackers. Seal at the boundary and keep plaintext out of side channels. |
 | Restored keystore backup without journal import or key retirement | The restored file still contains the wrapped key. |
 | Residue on disk | Deleted pages are zeroed in the SQLite file, but SQLite's temporary journal files, filesystem snapshots, and SSD wear-leveling can keep old bytes. Those bytes are wrapped keys, useless without the master key. |
+| Crash or power loss during `unseal_file` | The temporary file next to the destination can survive, holding the plaintext decrypted so far. Delete stray `.tmp*` files after a crash. |
 | Memory of a running process | Keys are zeroed when dropped, but an attacker who can read process memory sees keys in use. |
 | An attacker who can run code as your application | They can call `unseal` like your application does. |
 | Traffic analysis | Sealed sizes reveal approximate plaintext sizes. `key_id` links objects that belong to the same subject (not who the subject is). |

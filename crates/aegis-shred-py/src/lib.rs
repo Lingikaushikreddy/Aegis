@@ -252,7 +252,7 @@ impl Vault {
         .map_err(to_py_err)
     }
 
-    /// Unseal `source` into `destination`; nothing is written unless every chunk verifies.
+    /// Unseal `source` into `destination`, which appears only after every chunk verifies.
     #[pyo3(signature = (source, destination, context = None))]
     fn unseal_file(
         &self,

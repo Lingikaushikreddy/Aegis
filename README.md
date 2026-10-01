@@ -79,7 +79,7 @@ blob = vault.seal("user-42", b"+1 555 0100", context=b"users.phone:42")
 
 # Files and large data: streamed in 64 KiB chunks, constant memory, atomic output.
 vault.seal_file("user-42", "scan.pdf", "scan.pdf.aegis")
-vault.unseal_file("scan.pdf.aegis", "scan.pdf")   # writes nothing if verification fails
+vault.unseal_file("scan.pdf.aegis", "scan.pdf")   # scan.pdf appears only if every chunk verifies
 
 # Erasure.
 receipt = vault.shred("user-42")                  # ShredReceipt, or None if nothing was stored

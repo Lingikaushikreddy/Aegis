@@ -413,7 +413,9 @@ impl Vault {
         })
     }
 
-    /// Unseals the file at `source` into `destination`. Nothing is written unless every chunk verifies.
+    /// Unseals the file at `source` into `destination`, which is created only after every chunk
+    /// verifies. Output goes to a temporary file in the same directory first; it is removed on error
+    /// but can survive a crash.
     pub fn unseal_file(
         &self,
         source: impl AsRef<Path>,

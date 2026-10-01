@@ -40,4 +40,4 @@ module-name = "aegis_shred._native"
 features = ["pyo3/extension-module"]
 
 [tool.pytest.ini_options]
-testpaths = ["python/tests"]
+testpaths = ["python/tests", "examples/fastapi_users"]

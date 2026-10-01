@@ -6,10 +6,12 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+mod audit;
 mod error;
 mod format;
 mod keys;
 
+pub use audit::{AuditEntry, AuditReport};
 pub use error::{Error, Result};
 pub use format::{HEADER_LEN, Header, inspect_header};
 pub use keys::MasterKey;

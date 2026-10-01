@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>aegis-shred — crypto-shredding for application data</title>
+<meta name="description" content="One encryption key per data subject. Erase a person by destroying one key; every copy of their data, backups included, becomes unreadable. Rust core, Python package, CLI.">
+<style>
+  :root {
+    --bg: #fbfaf7; --fg: #1c1b19; --muted: #5f5b53; --line: #e3dfd6;
+    --code-bg: #f1eee7; --accent: #0f6b5c; --accent-fg: #ffffff;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #121211; --fg: #ecebe7; --muted: #a29d93; --line: #2c2b28;
+            --code-bg: #1c1b19; --accent: #5cc4ae; --accent-fg: #0b1a17; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 17px/1.6 var(--sans); }
+  main { max-width: 760px; margin: 0 auto; padding: 56px 20px 80px; }
+  h1 { font-size: clamp(2rem, 6vw, 2.8rem); line-height: 1.1; margin: 0 0 12px; letter-spacing: -0.02em; }
+  h2 { font-size: 1.15rem; margin: 48px 0 12px; }
+  p, li { color: var(--fg); }
+  .lede { font-size: 1.2rem; color: var(--muted); margin: 0 0 28px; }
+  .badge { display: inline-block; font: 600 12px/1 var(--mono); color: var(--muted);
+           border: 1px solid var(--line); border-radius: 999px; padding: 6px 10px; margin-bottom: 20px; }
+  pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 10px;
+        padding: 16px 18px; overflow-x: auto; font: 14px/1.55 var(--mono); margin: 0 0 16px; }
+  code { font-family: var(--mono); font-size: 0.92em; }
+  .cta { display: flex; gap: 12px; flex-wrap: wrap; margin: 8px 0 8px; }
+  .cta a { text-decoration: none; padding: 10px 16px; border-radius: 8px; font-weight: 600; }
+  .primary { background: var(--accent); color: var(--accent-fg); }
+  .secondary { border: 1px solid var(--line); color: var(--fg); }
+  ul { padding-left: 1.2em; }
+  li { margin: 6px 0; }
+  a { color: var(--accent); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
+  .card { border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .card strong { display: block; margin-bottom: 4px; }
+  .card span { color: var(--muted); font-size: 0.95rem; }
+  footer { margin-top: 64px; padding-top: 20px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.9rem; }
+</style>
+</head>
+<body>
+<main>
+  <span class="badge">v0.1 · alpha · MIT OR Apache-2.0</span>
+  <h1>Erase a person's data by destroying one key.</h1>
+  <p class="lede">aegis-shred gives every user their own encryption key. Shred the key and every
+  copy of their data (database, replicas, backups, exports) becomes unreadable at once.</p>
+  <div class="cta">
+    <a class="primary" href="https://github.com/Lingikaushikreddy/Aegis#readme">Read the docs</a>
+    <a class="secondary" href="https://github.com/Lingikaushikreddy/Aegis">GitHub</a>
+  </div>
+
+  <h2>Install</h2>
+  <pre><code>pip install aegis-shred        # Python 3.10+, Linux · macOS · Windows
+cargo add aegis-shred          # Rust
+cargo install aegis-shred-cli  # the `aegis` command</code></pre>
+
+  <h2>Five lines</h2>
+  <pre><code>from aegis_shred import MasterKey, Vault
+
+vault = Vault.open("keys.db", MasterKey.from_env("AEGIS_MASTER_KEY"), create=True)
+blob = vault.seal("user-42", b"alice@example.com", context=b"users.email")
+vault.shred("user-42")
+vault.unseal(blob, context=b"users.email")   # raises Shredded</code></pre>
+
+  <h2>What you get</h2>
+  <div class="grid">
+    <div class="card"><strong>Per-subject keys</strong><span>Created on first use, wrapped by your master key in a small SQLite keystore.</span></div>
+    <div class="card"><strong>Tamper-evident blobs</strong><span>AES-256-GCM in authenticated chunks. Edits, reordering, truncation and wrong context all fail.</span></div>
+    <div class="card"><strong>Instant erasure</strong><span>No key cache: a shred takes effect in every process on the next call.</span></div>
+    <div class="card"><strong>Audit trail</strong><span>Hash-chained log of key creation, shreds and rotations, without raw user ids.</span></div>
+    <div class="card"><strong>Backups handled</strong><span>Shred journal re-applies erasures to restored keystores; rotation retires old copies.</span></div>
+    <div class="card"><strong>Open format</strong><span>Byte-level spec with test vectors and an independent Python implementation in CI.</span></div>
+  </div>
+
+  <h2>Know the limits</h2>
+  <ul>
+    <li>A master key stolen <em>before</em> a shred, together with an old keystore copy, can still decrypt.</li>
+    <li>Plaintext your application copied into logs, caches or analytics is out of reach.</li>
+    <li>No independent security audit yet. Read the <a href="https://github.com/Lingikaushikreddy/Aegis/blob/main/docs/THREAT_MODEL.md">threat model</a>.</li>
+  </ul>
+
+  <footer>
+    Built by <a href="https://github.com/Lingikaushikreddy">Lingikaushikreddy</a>.
+    <a href="https://github.com/Lingikaushikreddy/Aegis/blob/main/docs/FORMAT.md">Format spec</a> ·
+    <a href="https://github.com/Lingikaushikreddy/Aegis/blob/main/docs/OPERATIONS.md">Operations guide</a> ·
+    <a href="https://github.com/Lingikaushikreddy/Aegis/security/advisories/new">Report a vulnerability</a>
+  </footer>
+</main>
+</body>
+</html>

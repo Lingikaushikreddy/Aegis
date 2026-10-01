@@ -1,6 +1,9 @@
 import os
+import signal
 import subprocess
 import sys
+
+import pytest
 
 
 def aegis(*args, cwd, env_extra=None, stdin=None):
@@ -33,3 +36,30 @@ def test_cli_through_python(tmp_path):
 def test_help_and_usage_errors(tmp_path):
     assert "crypto-shredding" in aegis("--help", cwd=tmp_path).stdout.lower()
     assert aegis(cwd=tmp_path).returncode == 2
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX signals")
+def test_ctrl_c_stops_a_waiting_command(tmp_path):
+    key = aegis("keygen", cwd=tmp_path).stdout.strip()
+    assert aegis("init", cwd=tmp_path, env_extra={"AEGIS_MASTER_KEY": key}).returncode == 0
+    env = {k: v for k, v in os.environ.items() if not k.startswith("AEGIS_")}
+    env["AEGIS_MASTER_KEY"] = key
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "aegis_shred", "shred", "user-1"],
+        cwd=tmp_path,
+        env=env,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    try:
+        seen = b""
+        while b"confirm" not in seen:  # wait until it is blocked on the confirmation prompt
+            chunk = os.read(proc.stderr.fileno(), 1024)
+            assert chunk, f"process ended early: {seen!r}"
+            seen += chunk
+        proc.send_signal(signal.SIGINT)
+        assert proc.wait(timeout=5) == -signal.SIGINT
+    finally:
+        proc.kill()
+        proc.wait()

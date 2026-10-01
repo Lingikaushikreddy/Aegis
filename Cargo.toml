@@ -1,0 +1,24 @@
+[workspace]
+resolver = "3"
+members = ["crates/aegis-shred", "crates/aegis-shred-cli", "crates/aegis-shred-py"]
+default-members = ["crates/aegis-shred", "crates/aegis-shred-cli"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/Lingikaushikreddy/Aegis"
+homepage = "https://github.com/Lingikaushikreddy/Aegis"
+
+[workspace.dependencies]
+aegis-shred = { path = "crates/aegis-shred", version = "0.1.0" }
+aegis-shred-cli = { path = "crates/aegis-shred-cli", version = "0.1.0" }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+
+# Crypto and Argon2 are painfully slow unoptimized; keep test runs fast.
+[profile.dev.package."*"]
+opt-level = 3

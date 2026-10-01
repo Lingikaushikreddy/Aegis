@@ -1,0 +1,43 @@
+[build-system]
+requires = ["maturin>=1.9,<2"]
+build-backend = "maturin"
+
+[project]
+name = "aegis-shred"
+description = "Crypto-shredding vault: one key per data subject, so erasing a person makes their data unreadable everywhere, backups included."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT OR Apache-2.0"
+license-files = ["LICENSE-MIT", "LICENSE-APACHE"]
+authors = [{ name = "Lingikaushikreddy" }]
+keywords = ["encryption", "crypto-shredding", "gdpr", "privacy", "right-to-erasure"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+    "Topic :: Security :: Cryptography",
+    "Typing :: Typed",
+]
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://github.com/Lingikaushikreddy/Aegis"
+Repository = "https://github.com/Lingikaushikreddy/Aegis"
+Documentation = "https://github.com/Lingikaushikreddy/Aegis#readme"
+Changelog = "https://github.com/Lingikaushikreddy/Aegis/blob/main/CHANGELOG.md"
+
+[project.scripts]
+aegis = "aegis_shred.__main__:main"
+
+[tool.maturin]
+manifest-path = "crates/aegis-shred-py/Cargo.toml"
+python-source = "python"
+module-name = "aegis_shred._native"
+features = ["pyo3/extension-module"]
+
+[tool.pytest.ini_options]
+testpaths = ["python/tests", "examples/fastapi_users"]

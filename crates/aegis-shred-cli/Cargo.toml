@@ -1,0 +1,31 @@
+[package]
+name = "aegis-shred-cli"
+description = "The `aegis` command-line tool for aegis-shred crypto-shredding vaults."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+keywords = ["encryption", "crypto-shredding", "gdpr", "privacy", "cli"]
+categories = ["cryptography", "command-line-utilities"]
+
+[lib]
+name = "aegis_shred_cli"
+path = "src/lib.rs"
+
+[[bin]]
+name = "aegis"
+path = "src/main.rs"
+
+[dependencies]
+aegis-shred.workspace = true
+clap = { version = "4", features = ["derive", "env"] }
+hex = "0.4"
+rpassword = "7"
+
+[dev-dependencies]
+assert_cmd = "2"
+predicates = "3"
+tempfile = "3"

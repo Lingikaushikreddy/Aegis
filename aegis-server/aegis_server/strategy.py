@@ -17,6 +17,7 @@ from flwr.server.strategy import FedAvg
 import logging
 from prometheus_client import Summary, Gauge, Counter
 import time
+import numpy as np
 
 # Initialize logger
 logger = logging.getLogger(__name__)

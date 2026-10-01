@@ -1,7 +1,7 @@
 name: Release
 
-# Tag pushes (v*) build and publish. Pull requests that touch packaging, and manual runs,
-# only build; every publish job requires a v* tag.
+# Tag pushes (v*) build, smoke-test and publish. Pull requests that touch packaging and manual
+# runs only build and smoke-test: every publish job requires a push of a v* tag.
 on:
   push:
     tags: ["v*"]
@@ -25,12 +25,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-latest, target: x86_64, manylinux: auto, smoke: true }
-          - { os: ubuntu-latest, target: aarch64, manylinux: auto, smoke: false }
-          - { os: ubuntu-latest, target: x86_64, manylinux: musllinux_1_2, smoke: false }
-          - { os: macos-latest, target: x86_64, manylinux: "", smoke: false }
-          - { os: macos-latest, target: aarch64, manylinux: "", smoke: true }
-          - { os: windows-latest, target: x64, manylinux: "", smoke: true }
+          # Each wheel is built on a runner that can also import it before anything is published.
+          - { os: ubuntu-latest, target: x86_64, manylinux: auto }
+          - { os: ubuntu-24.04-arm, target: aarch64, manylinux: auto }
+          - { os: ubuntu-latest, target: x86_64, manylinux: musllinux_1_2 }
+          - { os: macos-15-intel, target: x86_64, manylinux: "" }
+          - { os: macos-latest, target: aarch64, manylinux: "" }
+          - { os: windows-latest, target: x64, manylinux: "" }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -43,24 +44,17 @@ jobs:
           manylinux: ${{ matrix.manylinux }}
           args: --release --out dist
       - name: Smoke-test the wheel
-        if: matrix.smoke
+        if: matrix.manylinux != 'musllinux_1_2'
         shell: bash
         run: |
           python -m pip install --no-index --find-links dist aegis-shred
-          python - <<'PY'
-          import os, tempfile, aegis_shred as a
-          vault = a.Vault.open(os.path.join(tempfile.mkdtemp(), "k.db"), a.MasterKey.generate(), create=True)
-          blob = vault.seal("u", b"ok")
-          assert vault.unseal(blob) == b"ok"
-          vault.shred("u")
-          try:
-              vault.unseal(blob)
-          except a.Shredded:
-              print("wheel ok")
-          else:
-              raise SystemExit("shred did not take effect")
-          PY
+          python .github/scripts/smoke_wheel.py
           aegis --version
+      - name: Smoke-test the musllinux wheel in Alpine
+        if: matrix.manylinux == 'musllinux_1_2'
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src python:3.12-alpine sh -c \
+            "pip install --no-index --find-links dist aegis-shred && python .github/scripts/smoke_wheel.py && aegis --version"
       - uses: actions/upload-artifact@v7
         with:
           name: wheel-${{ matrix.os }}-${{ matrix.target }}-${{ matrix.manylinux || 'native' }}
@@ -70,6 +64,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - name: Tag matches the package version
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        run: |
+          version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "aegis-shred") | .version')
+          test "v$version" = "$GITHUB_REF_NAME" || { echo "tag $GITHUB_REF_NAME does not match package version $version"; exit 1; }
       - uses: PyO3/maturin-action@v1
         with:
           command: sdist
@@ -80,7 +79,7 @@ jobs:
           path: dist
 
   publish-pypi:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     needs: [wheels, sdist]
     runs-on: ubuntu-latest
     environment: pypi
@@ -94,7 +93,7 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
 
   publish-crates:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     needs: [wheels, sdist]
     runs-on: ubuntu-latest
     environment: crates-io
@@ -119,7 +118,7 @@ jobs:
           done
 
   github-release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     needs: [publish-pypi, publish-crates]
     runs-on: ubuntu-latest
     permissions:

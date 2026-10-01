@@ -51,17 +51,21 @@ jobs:
       - uses: EmbarkStudios/cargo-deny-action@v2
 
   python:
-    name: Python (${{ matrix.os }})
+    name: Python ${{ matrix.python }} (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ["3.12"]
+        include:
+          - os: ubuntu-latest
+            python: "3.10" # the oldest version the abi3 wheels support
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python }}
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Build and install the wheel

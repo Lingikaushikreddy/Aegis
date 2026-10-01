@@ -29,7 +29,12 @@ thiserror = "2"
 zeroize = "1"
 
 [dev-dependencies]
+criterion = "0.8"
 proptest = "1"
 
 [target.'cfg(unix)'.dev-dependencies]
 libc = "0.2"
+
+[[bench]]
+name = "throughput"
+harness = false

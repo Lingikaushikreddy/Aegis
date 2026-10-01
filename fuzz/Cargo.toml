@@ -1,0 +1,23 @@
+[package]
+name = "aegis-shred-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+aegis-shred = { path = "../crates/aegis-shred" }
+libfuzzer-sys = "0.4"
+tempfile = "3"
+
+[[bin]]
+name = "unseal"
+path = "fuzz_targets/unseal.rs"
+test = false
+doc = false
+bench = false
+
+# Not part of the main workspace.
+[workspace]

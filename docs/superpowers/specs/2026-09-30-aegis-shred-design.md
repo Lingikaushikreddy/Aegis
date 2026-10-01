@@ -35,16 +35,17 @@
 - FastAPI example, docs, static landing page, CI, release automation.
 
 ### Not in v0.1
-Cloud KMS backends (AWS/GCP/HashiCorp Vault), Postgres keystore, OS keychain, mobile (Swift/Kotlin) bindings, federated learning / differential privacy, any hosted service, searchable encryption, key escrow. The internal `KeyStore` boundary (§5.4) is kept narrow so a Postgres or KMS backend can be added in v0.2 without changing the public API.
+Cloud KMS backends (AWS/GCP/HashiCorp Vault), Postgres keystore, OS keychain, mobile (Swift/Kotlin) bindings, federated learning / differential privacy, any hosted service, searchable encryption, key escrow. The internal `keystore` boundary (§5.4) is kept narrow so a Postgres or KMS backend can be added in v0.2 without changing the public API.
 
 ## 3. Stage 0 — Cleanup and archive (done first)
 
-1. Tag current `origin/main` as `v0-platform`; push the tag.
-2. Create branch `legacy/platform` from the tag and add one commit:
-   - README: "Archived — superseded by aegis-shred on `main`" banner; remove the "84/84 tests / Status: PASSED / verified DP / turnkey HIPAA/GDPR" claims.
-   - Remove the invented testimonials (`components/sections/social-proof.tsx` entries naming people and companies) and their usage on the home page.
+1. Create branch `legacy/platform` from current `origin/main` and add one commit:
+   - README rewritten as an archive notice: "Archived — superseded by aegis-shred on `main`", an honest list of what the archived code does and does not do; the "84/84 tests / Status: PASSED / verified DP / turnkey HIPAA/GDPR" claims removed.
+   - Remove the entire Next.js marketing frontend (`app/`, `components/`, `public/`, `lib/`, Node/Next/Tailwind/ESLint config, `package*.json`, `PRD_AEGIS_FRONTEND.md`, `FRONTEND_DEVELOPMENT_COMPLETE.md`). Found during planning: beyond the invented testimonials, nearly every page presents real organizations (Mayo Clinic, JPMorgan Chase, NHS Digital, Barclays, HDFC Bank, Emirates NBD, Reliance Jio, DHA) as customers or POC prospects with real-looking contact emails, and claims certifications that do not exist (SOC 2 certified/compliant, FedRAMP Authorized, NHS Digital-approved integrator). Scrubbing line by line is not worth it for an archive.
+   - Remove `certs/*.pem` (compromised key).
    - Add the missing `import numpy as np` in `aegis-server/aegis_server/strategy.py`.
-   - Push the branch.
+   - Tag that commit `v0-platform`; push the branch and the tag.
+2. The live site at aegis-khaki.vercel.app keeps serving the old frontend until the Vercel project is repointed (§9); that repoint happens when the PR merges.
 3. On `refocus/aegis-shred`: remove the platform code (Next.js app, `components/`, `public/`, `aegis-core/`, `aegis-server/`, `aegis-gateway/`, `aegis-engine/`, `android/`, `ios/`, old `docs/*`, root test scripts, `test_data_ingestion/`, `certs/`, `scripts/`, `Makefile`, `requirements.txt`, Node config files). Add `certs/` and `*.pem` to `.gitignore`.
 4. `SECURITY.md` states the previously committed `certs/key.pem` (self-signed, CN=localhost, O=Vaulted) is compromised and must never be used.
 5. Changes reach `main` through a pull request from `refocus/aegis-shred`; Kaushik merges.
@@ -124,7 +125,7 @@ Body: STREAM construction (RustCrypto `aead::stream::StreamBE32` over AES-256-GC
 
 ### 5.3 Keystore (SQLite)
 
-Connection settings: `PRAGMA secure_delete = ON`, `PRAGMA journal_mode = DELETE` (no WAL), `PRAGMA foreign_keys = ON`, busy timeout 5 s. Key-mutating operations use `BEGIN IMMEDIATE`.
+Connection settings: `PRAGMA secure_delete = ON`, `PRAGMA journal_mode = DELETE` (no WAL), busy timeout 5 s. Key-mutating operations use `BEGIN IMMEDIATE`. Keystore initialization also runs inside `BEGIN IMMEDIATE`, so many processes opening with `create=True` at once converge on one keystore, and an unrelated SQLite database is never modified.
 
 ```sql
 CREATE TABLE meta (
@@ -157,7 +158,9 @@ CREATE TABLE audit (
 );
 ```
 
-- First `seal` for a subject creates its DEK (`INSERT ... ON CONFLICT DO NOTHING`, then `SELECT`, so concurrent first-seals across processes converge on one key).
+- First `seal` for a subject creates its DEK: read; if absent, take `BEGIN IMMEDIATE`, read again, insert only if still absent. Concurrent first-seals across processes converge on one key.
+- A process forked after opening the vault (gunicorn `--preload`, Celery prefork) reopens its own SQLite connection on first use and never touches the parent's (SQLite forbids sharing a connection across `fork()`).
+- Creating a keystore in a directory that does not exist fails with `NotFound`.
 - No in-memory DEK cache: every `seal`/`unseal` reads the keystore, so a shred in one process is effective in all others immediately. Cost is one indexed SQLite read plus one AES-GCM unwrap per call.
 - Opening a keystore with the wrong kind of master key (raw vs passphrase) ⇒ `WrongMasterKey` with an explanatory message.
 
@@ -165,7 +168,7 @@ CREATE TABLE audit (
 
 - `format` — header encode/decode, STREAM seal/unseal over `Read`/`Write`. Pure; no I/O beyond the given reader/writer.
 - `keys` — master key derivation, wrap/unwrap, HKDF, HMAC.
-- `keystore` — trait `KeyStore` with the operations the vault needs (`get_or_create_key`, `lookup_key`, `shred`, `tombstone_status`, `rotate`, `audit_append`, `audit_iter`, `import_tombstones`) and the SQLite implementation. Holds wrapped bytes only; unwrapping happens in `keys`.
+- `keystore` — the storage boundary: a small set of functions over a SQLite connection (open/configure, schema, meta get/put, key insert/lookup by subject or key_id, delete, tombstones, audit append/read, `key_status`). Holds wrapped bytes only; unwrapping happens in `keys`, orchestration in `vault`. It is a concrete module rather than a trait in v0.1 (one backend); the trait is extracted when the second backend lands.
 - `audit` — event types, hash-chain computation, verification.
 - `vault` — the public API composing the above.
 
@@ -213,7 +216,7 @@ vault.unseal(blob, context=b"users.email")        # raises Shredded
 vault.verify_audit()                              # -> AuditReport
 vault.audit_head()                                # -> (seq: int, hash_hex: str)
 vault.rotate_master_key(MasterKey.from_passphrase("correct horse ..."))
-vault.export_tombstones("shreds.jsonl")
+vault.export_tombstones("shreds.jsonl")          # -> int (tombstones written)
 vault.import_tombstones("shreds.jsonl")           # -> int (tombstones added)
 
 MasterKey.generate(); MasterKey.from_base64(s); MasterKey.from_file(path)
@@ -283,7 +286,7 @@ Written test-first (superpowers:test-driven-development).
 ## 8. CI and release
 
 - `ci.yml` (push, PR): `cargo fmt --check`; `cargo clippy --all-targets -- -D warnings`; `cargo test` on ubuntu, macos, windows; MSRV build (`rust-version` pinned in `Cargo.toml`); `cargo deny check`; `maturin build` + `pytest` on ubuntu, macos, windows.
-- `release.yml` (tag `v*`): maturin-action wheels (abi3-py310) for manylinux x86_64/aarch64, musllinux x86_64, macOS x86_64/arm64, Windows x64, plus sdist; publish to PyPI via Trusted Publishing; publish `aegis-shred` then `aegis-shred-cli` to crates.io via crates.io trusted publishing if available, otherwise a scoped `CARGO_REGISTRY_TOKEN` secret; create a GitHub Release with wheels attached and notes from `CHANGELOG.md`.
+- `release.yml` (tag `v*`): maturin-action wheels (abi3-py310) for manylinux x86_64/aarch64, musllinux x86_64, macOS x86_64/arm64, Windows x64, plus sdist; publish to PyPI via Trusted Publishing; publish `aegis-shred` then `aegis-shred-cli` to crates.io via trusted publishing, skipping versions already on crates.io (the first version of each crate must be published with an API token, which crates.io requires); create a GitHub Release with wheels attached and notes from `CHANGELOG.md`.
 - Kaushik's one-time setup: register the trusted publisher on pypi.org (pending publisher for `aegis-shred`) and crates.io. Exact steps provided when release work starts. The tag push that publishes happens only after he confirms.
 
 ## 9. Docs and site
@@ -300,4 +303,6 @@ Written test-first (superpowers:test-driven-development).
 
 - Changed from the in-chat design: decryption is `unseal` / `unseal_file` / `aegis unseal` rather than `open`, because `Vault.open(path)` (classmethod) and `vault.open(blob)` (method) cannot coexist on one type in Python or Rust.
 - Added `has_key`, `audit_head`, `Vault.create` (Rust), and `key_status` (Rust, for `aegis inspect`) for the example app and CLI; no other API additions.
-- Dependency versions and MSRV are chosen at implementation time from current releases.
+- Dependency versions and MSRV were fixed during planning (2026-09-30): RustCrypto `aes-gcm` 0.11 / `aead-stream` 0.6 / `hkdf` 0.13 / `hmac` 0.13 / `sha2` 0.11 / `argon2` 0.6, `rusqlite` 0.40, PyO3 0.29, MSRV 1.85 (shipped code only).
+- Added during planning, after building a prototype: `Vault::open_or_create` in Rust (what Python's `create=True` calls; safe under concurrent creation); `export_tombstones` returns the count written; fork safety and the missing-directory check (§5.3); the CLI shred receipt also prints the subject hash.
+- crates.io allows trusted publishing only for crates that already exist, so v0.1.0's two crates are first published with a short-lived token from Kaushik, and trusted publishing covers every later release (§8).

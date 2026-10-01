@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/aegis-shred", "crates/aegis-shred-cli"]
+members = ["crates/aegis-shred", "crates/aegis-shred-cli", "crates/aegis-shred-py"]
 default-members = ["crates/aegis-shred", "crates/aegis-shred-cli"]
 
 [workspace.package]
@@ -13,6 +13,7 @@ homepage = "https://github.com/Lingikaushikreddy/Aegis"
 
 [workspace.dependencies]
 aegis-shred = { path = "crates/aegis-shred", version = "0.1.0" }
+aegis-shred-cli = { path = "crates/aegis-shred-cli", version = "0.1.0" }
 
 [profile.release]
 lto = "thin"

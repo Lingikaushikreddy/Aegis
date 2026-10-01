@@ -77,6 +77,15 @@ fn check_kek(conn: &Connection, kek: &[u8; 32]) -> Result<()> {
     }
 }
 
+/// Like [`check_kek`], but reports a mismatch as a rotation by another process (the vault
+/// opened fine with this key earlier). Other errors, such as a busy database, pass through.
+fn ensure_current_kek(conn: &Connection, kek: &[u8; 32]) -> Result<()> {
+    match check_kek(conn, kek) {
+        Err(Error::WrongMasterKey(_)) => Err(Error::WrongMasterKey(ROTATED_ELSEWHERE)),
+        other => other,
+    }
+}
+
 fn write_kek_meta(
     conn: &Connection,
     master_key: &MasterKey,
@@ -106,7 +115,7 @@ fn unwrap_dek(conn: &Connection, kek: &[u8; 32], stored: &StoredKey) -> Result<K
     match keys::unwrap_key32(kek, &stored.wrapped_dek, &aad) {
         Some(dek) => Ok(dek),
         None => {
-            check_kek(conn, kek).map_err(|_| Error::WrongMasterKey(ROTATED_ELSEWHERE))?;
+            ensure_current_kek(conn, kek)?;
             Err(Error::Keystore(
                 "corrupt keystore: a data key does not unwrap".into(),
             ))
@@ -286,6 +295,9 @@ impl Vault {
             let dek = unwrap_dek(&tx, &inner.kek, &stored)?;
             return Ok((stored.key_id, dek));
         }
+        // Never wrap a new data key with a master key another process has rotated away:
+        // it would become unreadable once that old key is destroyed.
+        ensure_current_kek(&tx, &inner.kek)?;
         let key_id = keys::random_bytes::<16>();
         let dek = keys::random_key();
         let wrapped_dek = keys::wrap(&inner.kek, &dek[..], &keys::dek_aad(&key_id, &subject_hash));
@@ -478,7 +490,7 @@ impl Vault {
         let tx = inner
             .conn
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
-        check_kek(&tx, &inner.kek).map_err(|_| Error::WrongMasterKey(ROTATED_ELSEWHERE))?;
+        ensure_current_kek(&tx, &inner.kek)?;
         let stored_keys = keystore::all_keys(&tx)?;
         for stored in &stored_keys {
             let dek = unwrap_dek(&tx, &inner.kek, stored)?;

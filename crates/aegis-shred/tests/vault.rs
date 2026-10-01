@@ -487,3 +487,22 @@ fn files_can_be_sealed_and_unsealed_in_place() {
         b"id,email\n42,alice@example.com\n"
     );
 }
+
+#[test]
+fn stale_process_cannot_create_keys_after_rotation() {
+    let (dir, vault, old_key) = new_vault();
+    let path = keystore_path(&dir);
+    let stale = Vault::open(&path, &old_key).unwrap();
+    let new_key = MasterKey::generate();
+    vault.rotate_master_key(&new_key).unwrap();
+
+    // A process still holding the old master key must not wrap a new data key with it:
+    // once the old key is destroyed, that subject's data would be unreadable.
+    assert!(matches!(
+        stale.seal("new-user", b"x", b""),
+        Err(Error::WrongMasterKey(_))
+    ));
+    let current = Vault::open(&path, &new_key).unwrap();
+    assert!(!current.has_key("new-user").unwrap());
+    current.rotate_master_key(&MasterKey::generate()).unwrap();
+}
